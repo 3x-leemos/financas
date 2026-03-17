@@ -16,7 +16,7 @@ header{padding:20px;font-size:22px;font-weight:600}
 .grid-2{grid-template-columns:1fr 1fr}
 .stat{font-size:20px;font-weight:600}
 .label{font-size:12px;color:#94a3b8}
-input,select,button{padding:10px;border-radius:10px;border:none;background:#1f2937;color:#fff}
+input,button,select{padding:10px;border-radius:10px;border:none;background:#1f2937;color:#fff}
 button{cursor:pointer;background:#22c55e}
 button:hover{opacity:0.9}
 .item{padding:12px;border-radius:12px;margin-bottom:10px}
@@ -30,15 +30,17 @@ button:hover{opacity:0.9}
 .login{max-width:350px;margin:120px auto}
 .hidden{display:none}
 canvas{max-height:220px}
+.switch{margin-top:10px;font-size:12px;cursor:pointer;color:#94a3b8}
 </style>
 </head>
 <body>
 
 <div id="auth" class="login card">
-<h3>Entrar</h3>
+<h3 id="authTitle">Entrar</h3>
 <input id="user" placeholder="Usuário">
 <input id="pass" type="password" placeholder="Senha">
-<button onclick="login()">Entrar</button>
+<button onclick="login()" id="btnAuth">Entrar</button>
+<div class="switch" onclick="toggleAuth()" id="switchText">Não tem conta? Criar</div>
 </div>
 
 <div id="app" class="hidden">
@@ -82,9 +84,45 @@ canvas{max-height:220px}
 let usuarioAtual = null;
 let dados = [];
 let charts = [];
+let modoCadastro = false;
+
+function toggleAuth(){
+  modoCadastro = !modoCadastro;
+  document.getElementById('authTitle').innerText = modoCadastro ? 'Criar Conta' : 'Entrar';
+  document.getElementById('btnAuth').innerText = modoCadastro ? 'Cadastrar' : 'Entrar';
+  document.getElementById('switchText').innerText = modoCadastro ? 'Já tem conta? Entrar' : 'Não tem conta? Criar';
+}
+
+function getUsuarios(){
+  return JSON.parse(localStorage.getItem('usuarios') || '{}');
+}
+
+function salvarUsuarios(u){
+  localStorage.setItem('usuarios', JSON.stringify(u));
+}
 
 function login(){
-  usuarioAtual = document.getElementById('user').value || 'default';
+  const u = user.value.trim();
+  const p = pass.value.trim();
+
+  if(!u || !p) return alert('Preencha usuário e senha');
+
+  let usuarios = getUsuarios();
+
+  if(modoCadastro){
+    if(usuarios[u]) return alert('Usuário já existe');
+
+    usuarios[u] = {senha:p};
+    salvarUsuarios(usuarios);
+    alert('Conta criada!');
+    toggleAuth();
+    return;
+  }
+
+  if(!usuarios[u] || usuarios[u].senha !== p)
+    return alert('Usuário ou senha inválidos');
+
+  usuarioAtual = u;
   iniciar();
 }
 
@@ -181,18 +219,12 @@ function render(){
 
   charts.push(new Chart(document.getElementById('grafico1'), {
     type:'doughnut',
-    data:{
-      labels:['Devo','Recebo'],
-      datasets:[{data:[devo,recebo]}]
-    }
+    data:{labels:['Devo','Recebo'],datasets:[{data:[devo,recebo]}]}
   }));
 
   charts.push(new Chart(document.getElementById('grafico2'), {
     type:'bar',
-    data:{
-      labels:['Pessoal','Profissional'],
-      datasets:[{data:[porTipo.pessoal,porTipo.profissional]}]
-    }
+    data:{labels:['Pessoal','Profissional'],datasets:[{data:[porTipo.pessoal,porTipo.profissional]}]}
   }));
 }
 
