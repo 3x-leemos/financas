@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Control PRO</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Inter',sans-serif;background:#0f172a;color:#e2e8f0}
+header{padding:20px;font-size:22px;font-weight:600}
+.container{max-width:1200px;margin:auto;padding:20px}
+.card{background:#111827;border-radius:16px;padding:15px;box-shadow:0 10px 25px rgba(0,0,0,0.3)}
+.grid{display:grid;gap:15px}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+.grid-2{grid-template-columns:1fr 1fr}
+.stat{font-size:20px;font-weight:600}
+.label{font-size:12px;color:#94a3b8}
+input,select,button{padding:10px;border-radius:10px;border:none;background:#1f2937;color:#fff}
+button{cursor:pointer;background:#22c55e}
+button:hover{opacity:0.9}
+.item{padding:12px;border-radius:12px;margin-bottom:10px}
+.deve{background:#3f1d1d}
+.recebe{background:#0f2f1f}
+.badge{padding:3px 8px;border-radius:20px;font-size:11px;margin-right:5px}
+.pessoal{background:#1e3a8a}
+.profissional{background:#92400e}
+.top{display:flex;justify-content:space-between;align-items:center}
+.small{font-size:12px;color:#94a3b8}
+.login{max-width:350px;margin:120px auto}
+.hidden{display:none}
+canvas{max-height:220px}
+</style>
+</head>
+<body>
+
+<div id="auth" class="login card">
+<h3>Entrar</h3>
+<input id="user" placeholder="Usuário">
+<input id="pass" type="password" placeholder="Senha">
+<button onclick="login()">Entrar</button>
+</div>
+
+<div id="app" class="hidden">
+<header>Controle Financeiro PRO</header>
+<div class="container">
+
+<div class="grid grid-4">
+<div class="card"><div class="label">Devo</div><div class="stat" id="totalDevo">R$0</div></div>
+<div class="card"><div class="label">Recebo</div><div class="stat" id="totalRecebo">R$0</div></div>
+<div class="card"><div class="label">Saldo</div><div class="stat" id="saldo">R$0</div></div>
+<div class="card"><div class="label">Atrasadas</div><div class="stat" id="atrasadas">0</div></div>
+</div>
+
+<div class="grid grid-2" style="margin-top:15px">
+<div class="card"><canvas id="grafico1"></canvas></div>
+<div class="card"><canvas id="grafico2"></canvas></div>
+</div>
+
+<div class="card" style="margin-top:15px">
+<div class="grid grid-4">
+<input id="nome" placeholder="Nome">
+<input id="telefone" placeholder="Telefone">
+<input id="servico" placeholder="Serviço / Motivo">
+<select id="tipo"><option value="pessoal">Pessoal</option><option value="profissional">Profissional</option></select>
+<select id="relacao"><option value="deve">Eu devo</option><option value="recebe">Me deve</option></select>
+<input id="valor" type="number" placeholder="Valor">
+<input id="vencimento" type="date">
+<button onclick="add()">Adicionar</button>
+</div>
+</div>
+
+<div class="grid grid-2" style="margin-top:15px">
+<div class="card"><h4>Eu devo</h4><div id="deve"></div></div>
+<div class="card"><h4>Me devem</h4><div id="recebe"></div></div>
+</div>
+
+</div>
+</div>
+
+<script>
+let usuarioAtual = null;
+let dados = [];
+let charts = [];
+
+function login(){
+  usuarioAtual = document.getElementById('user').value || 'default';
+  iniciar();
+}
+
+function iniciar(){
+  document.getElementById('auth').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  dados = JSON.parse(localStorage.getItem('dados_'+usuarioAtual) || '[]');
+  render();
+}
+
+function salvar(){
+  localStorage.setItem('dados_'+usuarioAtual, JSON.stringify(dados));
+}
+
+function add(){
+  if(!valor.value) return alert('Digite um valor');
+
+  let obj = {
+    nome: nome.value,
+    telefone: telefone.value,
+    servico: servico.value,
+    tipo: tipo.value,
+    relacao: relacao.value,
+    valorTotal: parseFloat(valor.value),
+    valorPago: 0,
+    vencimento: vencimento.value
+  };
+
+  dados.push(obj);
+  salvar();
+  limparCampos();
+  render();
+}
+
+function limparCampos(){
+  nome.value='';
+  telefone.value='';
+  servico.value='';
+  valor.value='';
+  vencimento.value='';
+}
+
+function render(){
+  const deveEl = document.getElementById('deve');
+  const recebeEl = document.getElementById('recebe');
+
+  deveEl.innerHTML = '';
+  recebeEl.innerHTML = '';
+
+  charts.forEach(c => c.destroy());
+  charts = [];
+
+  let devo = 0, recebo = 0, atrasadas = 0;
+  let porTipo = {pessoal:0, profissional:0};
+
+  let hoje = new Date().toISOString().split('T')[0];
+
+  dados.forEach((d,i)=>{
+    let restante = d.valorTotal - d.valorPago;
+
+    if(d.relacao === 'deve') devo += restante;
+    else recebo += restante;
+
+    porTipo[d.tipo] += restante;
+
+    if(d.vencimento && d.vencimento < hoje && restante > 0) atrasadas++;
+
+    let div = document.createElement('div');
+    div.className = 'item ' + d.relacao;
+
+    div.innerHTML = `
+      <div class='top'>
+        <strong>${d.nome}</strong>
+        <span>R$ ${restante.toFixed(2)}</span>
+      </div>
+      <div class='small'>${d.servico || 'Sem descrição'}</div>
+      <div class='small'>Venc: ${d.vencimento || '-'}</div>
+      <div style='margin-top:5px'>
+        <span class='badge ${d.tipo}'>${d.tipo}</span>
+      </div>
+      <button onclick='pagar(${i})'>💰</button>
+      <button onclick='wpp(${i})'>📲</button>
+      <button onclick='remover(${i})'>❌</button>
+    `;
+
+    if(d.relacao === 'deve') deveEl.appendChild(div);
+    else recebeEl.appendChild(div);
+  });
+
+  document.getElementById('totalDevo').innerText = 'R$ ' + devo.toFixed(2);
+  document.getElementById('totalRecebo').innerText = 'R$ ' + recebo.toFixed(2);
+  document.getElementById('saldo').innerText = 'R$ ' + (recebo - devo).toFixed(2);
+  document.getElementById('atrasadas').innerText = atrasadas;
+
+  charts.push(new Chart(document.getElementById('grafico1'), {
+    type:'doughnut',
+    data:{
+      labels:['Devo','Recebo'],
+      datasets:[{data:[devo,recebo]}]
+    }
+  }));
+
+  charts.push(new Chart(document.getElementById('grafico2'), {
+    type:'bar',
+    data:{
+      labels:['Pessoal','Profissional'],
+      datasets:[{data:[porTipo.pessoal,porTipo.profissional]}]
+    }
+  }));
+}
+
+function pagar(i){
+  let v = parseFloat(prompt('Valor pago:'));
+  if(isNaN(v)) return;
+
+  dados[i].valorPago += v;
+
+  if(dados[i].valorPago > dados[i].valorTotal)
+    dados[i].valorPago = dados[i].valorTotal;
+
+  salvar();
+  render();
+}
+
+function remover(i){
+  if(confirm('Remover item?')){
+    dados.splice(i,1);
+    salvar();
+    render();
+  }
+}
+
+function wpp(i){
+  let d = dados[i];
+  let numero = d.telefone.replace(/\D/g,'');
+
+  if(!numero) return alert('Número inválido');
+
+  let msg = `Cobrança de R$ ${(d.valorTotal - d.valorPago).toFixed(2)}`;
+  window.open(`https://wa.me/55${numero}?text=${encodeURIComponent(msg)}`);
+}
+</script>
+
+</body>
+</html>
